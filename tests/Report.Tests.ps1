@@ -37,7 +37,10 @@ Describe 'HTML report generation' {
         # emailed around, so "</script>" in a value must not end the block.
         $raw = ([regex]::Match($script:Html, '(?s)<script type="application/json" id="payload">(.*?)</script>')).Groups[1].Value
         $raw | Should -Not -Match '</script'
-        $raw | Should -Match '<\\/script'
+        # Windows PowerShell 5.1's ConvertTo-Json emits '<' as a backslash-u escape,
+        # leaving no literal '</' for the generator's '</' -> '<\/' pass to rewrite.
+        # Both encodings are inert, so accept either rather than the 7.x form alone.
+        $raw | Should -Match '(<\\/script|\\u003c/script)'
     }
 
     It 'preserves regex replacement tokens verbatim' {
