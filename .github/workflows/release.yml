@@ -48,7 +48,7 @@ jobs:
 
       - name: Generate a sample report to ship with the release
         shell: pwsh
-        run: ./build/New-SampleReport.ps1 -OutputPath ./SecurityHealth_SampleReport.html
+        run: ./build/New-SampleReport.ps1 -OutputPath ./SecurityHealth_SampleReport.html -Fleet
 
       - name: Produce checksums
         shell: pwsh
@@ -63,6 +63,9 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          # Required for workflow_dispatch, where github.ref is a branch and the
+          # action would otherwise refuse with "GitHub Releases requires a tag".
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           draft: false
           generate_release_notes: true
           files: |

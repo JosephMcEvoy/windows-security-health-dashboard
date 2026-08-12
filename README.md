@@ -69,7 +69,9 @@ Warning, Info — so you are not left reading raw tables to find the problem.
 </table>
 
 > **WPF dashboard screenshots.** The images above are of the exported HTML
-> report, generated reproducibly in CI. The live WPF dashboard needs a real
+> report, generated reproducibly from mock data by
+> [`build/New-Screenshots.ps1`](build/New-Screenshots.ps1) - no real host data
+> is involved. The live WPF dashboard needs a real
 > Windows desktop to capture — run [`build/Capture-Screenshots.ps1`](build/Capture-Screenshots.ps1)
 > on a **lab** machine to produce them. The dashboard mirrors the report exactly:
 > same tabs, same cards, same tables, because both render from the same
@@ -116,7 +118,7 @@ $cred = Get-Credential CORP\svc_secops
 .\src\SecurityHealthDashboard.ps1 -ComputerName PC-042 -BaselinePath .\golden.json
 
 # Unattended: no GUI, write reports to a share, act on the exit code
-.\src\SecurityHealthDashboard.ps1 -Quiet -TargetFile .\workstations.txt `
+.\src\SecurityHealthDashboard.ps1 -Quiet -TargetFile .\examples\workstations.txt `
     -OutputPath \\fileserver\SecReports -Throttle 16
 if ($LASTEXITCODE -ge 2) { "Escalate - critical findings or regressions" }
 ```
@@ -185,6 +187,7 @@ build/                            static checks, sample report, screenshots
 tests/                            Pester unit + contract tests
 tests/browser/                    Playwright tests for the HTML report
 docs/screenshots/                 images used above
+examples/                         a sample -TargetFile list
 .github/workflows/                CI, security, release
 ```
 

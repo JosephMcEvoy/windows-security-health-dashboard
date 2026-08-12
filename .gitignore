@@ -8,6 +8,7 @@ SecurityBaseline_*.json
 SecurityHealth_SUMMARY_*.csv
 
 # Test artifacts
+tests/browser/report.html
 TestResults*.xml
 coverage*.xml
 tests/.artifacts/
@@ -20,6 +21,7 @@ tests/.artifacts/
 .DS_Store
 Thumbs.db
 
-# Node (only used by the report browser test)
+# Node (only used by the report browser test).
+# tests/browser/package-lock.json IS committed, so CI can npm ci and Dependabot
+# has something to bump.
 node_modules/
-package-lock.json

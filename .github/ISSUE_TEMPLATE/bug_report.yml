@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Security issues do not belong here.** Report those privately —
-        see [SECURITY.md](../../blob/main/SECURITY.md).
+        **Security issues do not belong here.** Report those privately - see
+        [SECURITY.md](https://github.com/JosephMcEvoy/windows-security-health-dashboard/blob/main/SECURITY.md).
 
   - type: textarea
     id: what
