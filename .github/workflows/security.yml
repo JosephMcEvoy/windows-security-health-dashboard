@@ -44,10 +44,11 @@ jobs:
       - name: Injection and credential rules
         shell: pwsh
         run: |
-          # PSScriptAnalyzer's security-relevant built-ins, plus InjectionHunter
-          # if it installed. These target the two things that would actually
-          # matter here: building code from untrusted strings, and mishandling
-          # credentials.
+          # PSScriptAnalyzer's security-relevant built-ins. These are precise
+          # rather than heuristic, so they stay a hard failure; they target the
+          # two things that would actually matter here: building code from
+          # untrusted strings, and mishandling credentials. The heuristic
+          # InjectionHunter pass runs separately, in the step below.
           $rules = @(
             'PSAvoidUsingPlainTextForPassword'
             'PSAvoidUsingConvertToSecureStringWithPlainText'
@@ -66,49 +67,10 @@ jobs:
 
       - name: InjectionHunter (baselined)
         shell: pwsh
-        run: |
-          # InjectionHunter is heuristic and fires on patterns this tool uses by
-          # design: dynamic member access over its own column names, and passing
-          # its own scriptblocks across a runspace boundary as text. Those are
-          # reviewed and recorded in the baseline, per rule.
-          #
-          # The baseline is a ceiling, not a mute button. A new rule, or more
-          # hits for an existing one, fails the job and has to be looked at.
-          $mod = Get-Module -ListAvailable InjectionHunter
-          if (-not $mod) {
-            Write-Host '::warning::InjectionHunter is not installed; this pass did not run.'
-            exit 0
-          }
-
-          $found = @(Invoke-ScriptAnalyzer -Path ./src -Recurse `
-            -CustomRulePath $mod[0].Path -ErrorAction SilentlyContinue)
-          $found | Format-Table -AutoSize RuleName, Severity, Line, Message |
-            Out-String -Width 200 | Write-Host
-
-          $baseline = Import-PowerShellDataFile ./build/InjectionHunterBaseline.psd1
-          $counts = @{}
-          foreach ($f in $found) { $counts[$f.RuleName] = 1 + [int]$counts[$f.RuleName] }
-
-          $regressions = @()
-          foreach ($rule in ($counts.Keys | Sort-Object)) {
-            $allowed = [int]$baseline[$rule]
-            if ($counts[$rule] -gt $allowed) {
-              $regressions += "$rule : $($counts[$rule]) finding(s), baseline allows $allowed"
-            }
-          }
-          # A drop is good news, but leaving the ceiling high hides the next one.
-          foreach ($rule in ($baseline.Keys | Sort-Object)) {
-            $now = [int]$counts[$rule]
-            if ($now -lt [int]$baseline[$rule]) {
-              Write-Host "::warning::$rule is down to $now (baseline $($baseline[$rule])) - lower the baseline."
-            }
-          }
-
-          if ($regressions) {
-            $regressions | ForEach-Object { Write-Host "::error::$_" }
-            throw "InjectionHunter found $($regressions.Count) rule(s) above baseline."
-          }
-          Write-Host "InjectionHunter: $($found.Count) finding(s), all within the reviewed baseline."
+        # Findings are matched to reviewed sites by fingerprint, not by count,
+        # so swapping a safe hit for an unsafe one cannot pass on an unchanged
+        # total. The check lives in the repo so it runs the same way locally.
+        run: ./build/Test-InjectionBaseline.ps1
 
   contract:
     name: Read-only + credential contract
