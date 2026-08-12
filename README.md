@@ -68,15 +68,6 @@ Warning, Info — so you are not left reading raw tables to find the problem.
 </tr>
 </table>
 
-> **WPF dashboard screenshots.** The images above are of the exported HTML
-> report, generated reproducibly from mock data by
-> [`build/New-Screenshots.ps1`](build/New-Screenshots.ps1) - no real host data
-> is involved. The live WPF dashboard needs a real
-> Windows desktop to capture — run [`build/Capture-Screenshots.ps1`](build/Capture-Screenshots.ps1)
-> on a **lab** machine to produce them. The dashboard mirrors the report exactly:
-> same tabs, same cards, same tables, because both render from the same
-> functions.
-
 ## Quick start
 
 ```powershell
@@ -225,8 +216,7 @@ The short version:
 **Do not open a public issue.** Use
 [GitHub Security Advisories](https://github.com/JosephMcEvoy/windows-security-health-dashboard/security/advisories/new)
 (repository → **Security** → **Advisories** → **Report a vulnerability**) for a
-private thread with the maintainers, or email **joe.maci@gmail.com** with
-`SECURITY` in the subject.
+private thread with the maintainers.
 
 [SECURITY.md](SECURITY.md) sets out what is in scope — including report XSS,
 credential exposure, and any change that makes the tool write to a target — what
