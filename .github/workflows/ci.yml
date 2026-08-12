@@ -1,0 +1,207 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Default to no permissions; each job asks for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structural guards
+        shell: pwsh
+        run: ./build/Invoke-StaticChecks.ps1
+
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+      - name: Analyze
+        shell: pwsh
+        run: |
+          $results  = Invoke-ScriptAnalyzer -Path ./src   -Recurse -Settings ./build/PSScriptAnalyzerSettings.psd1
+          $results += Invoke-ScriptAnalyzer -Path ./build -Recurse -Settings ./build/PSScriptAnalyzerSettings.psd1
+          $results += Invoke-ScriptAnalyzer -Path ./tests -Recurse -Settings ./build/PSScriptAnalyzerSettings.psd1
+          if ($results) {
+            $results | Format-Table -AutoSize RuleName, Severity, Line, ScriptName, Message | Out-String -Width 200 | Write-Host
+          }
+          $blocking = @($results | Where-Object { $_.Severity -in 'Error', 'Warning' })
+          Write-Host "$($results.Count) finding(s), $($blocking.Count) blocking."
+          if ($blocking.Count) { throw "PSScriptAnalyzer reported $($blocking.Count) error/warning finding(s)." }
+
+  test:
+    name: Pester (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+      - name: Run tests
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests'
+          $cfg.Run.PassThru = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputPath = 'TestResults.xml'
+          $cfg.TestResult.OutputFormat = 'NUnitXml'
+          $r = Invoke-Pester -Configuration $cfg
+          if ($r.FailedCount -gt 0) { throw "$($r.FailedCount) test(s) failed." }
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-${{ matrix.os }}
+          path: TestResults.xml
+          if-no-files-found: warn
+
+  # Windows PowerShell 5.1 is the primary target and behaves differently from
+  # PowerShell 7 in exactly the places this tool is sensitive to (parameter
+  # attribute re-evaluation, ANSI file reading, array unrolling). Test it.
+  windows-powershell-51:
+    name: Windows PowerShell 5.1
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static checks under 5.1
+        shell: powershell
+        run: .\build\Invoke-StaticChecks.ps1
+      - name: Pester under 5.1
+        shell: powershell
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests'
+          $cfg.Run.PassThru = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          $r = Invoke-Pester -Configuration $cfg
+          if ($r.FailedCount -gt 0) { throw "$($r.FailedCount) test(s) failed under Windows PowerShell 5.1." }
+
+  smoke:
+    name: Headless smoke test (scans the runner)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan localhost in quiet mode
+        shell: powershell
+        run: |
+          # The runner is a real Windows host, so this exercises the collectors
+          # for real: Defender, firewall, services, audit policy, the lot.
+          # No console is attached, which is precisely the condition that once
+          # made a credential prompt hang the tool forever.
+          $ErrorActionPreference = 'Continue'
+          .\src\SecurityHealthDashboard.ps1 -Quiet -ComputerName localhost `
+              -OutputPath "$env:RUNNER_TEMP\scan" -LookbackDays 1 -TimeoutSec 300
+          $code = $LASTEXITCODE
+          Write-Host "Exit code: $code"
+          # 0-2 are findings-based and all legitimate. 3 means a target could not
+          # be scanned, which for localhost is a genuine failure.
+          if ($code -eq 3) { throw 'Quiet scan could not collect from localhost.' }
+          if ($code -gt 3) { throw "Unexpected exit code $code." }
+      - name: Verify the artifacts are real
+        shell: powershell
+        run: |
+          $dir = "$env:RUNNER_TEMP\scan"
+          $html = Get-ChildItem $dir -Filter 'SecurityHealth_*.html' | Select-Object -First 1
+          $json = Get-ChildItem $dir -Filter 'SecurityScan_*.json'   | Select-Object -First 1
+          if (-not $html) { throw 'No HTML report was produced.' }
+          if (-not $json) { throw 'No JSON snapshot was produced.' }
+          Write-Host "HTML: $($html.Length) bytes   JSON: $($json.Length) bytes"
+          if ($html.Length -lt 20000) { throw 'HTML report is suspiciously small.' }
+
+          $content = Get-Content $html.FullName -Raw
+          if ($content -notmatch '<script type="application/json" id="payload">') { throw 'Report payload block is missing.' }
+          if ($content -match 'GetNetworkCredential|ConvertFrom-SecureString') { throw 'Report contains credential-handling text.' }
+          # The report must be self-contained - no CDN, no remote assets.
+          if ($content -match '<script[^>]+src=')       { throw 'Report references an external script.' }
+          if ($content -match '<link[^>]+href="https?:'){ throw 'Report references an external stylesheet.' }
+
+          $snap = Get-Content $json.FullName -Raw | ConvertFrom-Json
+          if ($snap.SchemaVersion -ne 1) { throw "Unexpected snapshot schema: $($snap.SchemaVersion)" }
+          Write-Host "Snapshot sections: $(@($snap.Sections.PSObject.Properties).Count)"
+      - name: Baseline diff round-trip
+        shell: powershell
+        run: |
+          # Scanning the same host twice against its own baseline must report
+          # zero regressions. If it does not, the snapshot is not stable.
+          $dir  = "$env:RUNNER_TEMP\scan"
+          $base = (Get-ChildItem $dir -Filter 'SecurityScan_*.json' | Select-Object -First 1).FullName
+          $out  = & .\src\SecurityHealthDashboard.ps1 -Quiet -ComputerName localhost `
+                    -BaselinePath $base -NoHtml -LookbackDays 1 -TimeoutSec 300 6>&1
+          $summary = @($out | Where-Object { $_.PSObject.Properties.Name -contains 'Regressions' })
+          if (-not $summary) { throw 'Quiet mode did not emit summary objects.' }
+          $regressions = ($summary | Measure-Object -Property Regressions -Sum).Sum
+          Write-Host "Regressions vs own baseline: $regressions"
+          if ($regressions -gt 0) { throw "A host diffed against its own baseline reported $regressions regression(s)." }
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-scan-output
+          path: ${{ runner.temp }}/scan
+          if-no-files-found: warn
+          retention-days: 7
+
+  report-ui:
+    name: Report UI (headless browser)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        working-directory: tests/browser
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Generate a report from mock data
+        shell: pwsh
+        run: ./build/New-SampleReport.ps1 -OutputPath ./tests/browser/report.html
+      - name: Drive the report in a real browser
+        working-directory: tests/browser
+        run: node report.test.js report.html
+      - name: Upload the generated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-report
+          path: tests/browser/report.html
+          if-no-files-found: warn

@@ -1,0 +1,12 @@
+{
+  "name": "security-health-dashboard-report-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless browser tests for the generated HTML report.",
+  "scripts": {
+    "test": "node report.test.js report.html"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

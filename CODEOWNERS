@@ -1,0 +1,8 @@
+# Default owner for everything in the repo.
+*                       @JosephMcEvoy
+
+# The collector runs with administrative rights on remote machines and the
+# report is rendered in a browser. Both deserve a second look on every change.
+/src/                   @JosephMcEvoy
+/.github/workflows/     @JosephMcEvoy
+/SECURITY.md            @JosephMcEvoy

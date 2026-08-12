@@ -1,0 +1,45 @@
+version: 2
+
+updates:
+  # This project has no runtime package dependencies - it is a single
+  # PowerShell script that uses only in-box Windows cmdlets, deliberately, so
+  # it can run on a locked-down or air-gapped host with nothing to install.
+  #
+  # The real supply-chain surface is therefore the CI itself: the third-party
+  # GitHub Actions that run with access to this repository.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ci"
+    groups:
+      # One PR for routine bumps; security fixes still come through on their own.
+      actions-minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The report's browser test is the only place npm is used, and only in CI.
+  - package-ecosystem: "npm"
+    directory: "/tests/browser"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "test"
+    labels:
+      - "dependencies"
+      - "tests"

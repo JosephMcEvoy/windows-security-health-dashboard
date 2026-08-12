@@ -1,0 +1,25 @@
+# Scan output - may contain host names, account names and event detail
+out/
+output/
+*.local.json
+SecurityHealth_*.html
+SecurityScan_*.json
+SecurityBaseline_*.json
+SecurityHealth_SUMMARY_*.csv
+
+# Test artifacts
+TestResults*.xml
+coverage*.xml
+tests/.artifacts/
+
+# Editors / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Node (only used by the report browser test)
+node_modules/
+package-lock.json

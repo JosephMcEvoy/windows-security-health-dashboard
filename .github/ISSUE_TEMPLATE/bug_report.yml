@@ -1,0 +1,75 @@
+name: Bug report
+description: Something the tool does wrong, or reports incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issues do not belong here.** Report those privately —
+        see [SECURITY.md](../../blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The exact command line, with anything sensitive redacted.
+      placeholder: |
+        .\SecurityHealthDashboard.ps1 -ComputerName PC-042 -LookbackDays 14
+      render: powershell
+    validations:
+      required: true
+
+  - type: textarea
+    id: collection-log
+    attributes:
+      label: Collection log
+      description: >
+        The single most useful thing you can paste. The Collection log tab of
+        the dashboard, or the "Errors" section of a JSON snapshot. It says
+        exactly which collectors failed and why. Redact host and account names.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Tool version
+      description: The release tag, or the value of $script:ToolVersion.
+      placeholder: "1.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: psversion
+    attributes:
+      label: PowerShell on the operator workstation
+      options:
+        - Windows PowerShell 5.1
+        - PowerShell 7.x
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system of the TARGET
+      placeholder: "Windows 11 24H2 build 26100 / Windows Server 2022"
+
+  - type: checkboxes
+    id: mode
+    attributes:
+      label: How were you running it
+      options:
+        - label: GUI dashboard
+        - label: "-Quiet (headless / scheduled task)"
+        - label: Against multiple targets (fleet)
+        - label: With a baseline (-BaselinePath)
+        - label: With alternate credentials (-Credential)

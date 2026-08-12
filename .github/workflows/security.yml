@@ -1,0 +1,115 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a newly-disclosed issue in a pinned action surfaces without
+    # waiting for someone to open a PR.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks needs history to scan past commits
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-lint:
+    name: PSScriptAnalyzer security rules
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install analyzers
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          Install-Module InjectionHunter -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction SilentlyContinue
+      - name: Injection and credential rules
+        shell: pwsh
+        run: |
+          # PSScriptAnalyzer's security-relevant built-ins, plus InjectionHunter
+          # if it installed. These target the two things that would actually
+          # matter here: building code from untrusted strings, and mishandling
+          # credentials.
+          $rules = @(
+            'PSAvoidUsingPlainTextForPassword'
+            'PSAvoidUsingConvertToSecureStringWithPlainText'
+            'PSUsePSCredentialType'
+            'PSAvoidUsingUserNameAndPasswordParams'
+            'PSAvoidUsingInvokeExpression'
+            'PSAvoidUsingComputerNameHardcoded'
+            'PSUsingInvokeExpressionUnsafely'
+          )
+          $findings = Invoke-ScriptAnalyzer -Path ./src -Recurse -IncludeRule $rules
+          $mod = Get-Module -ListAvailable InjectionHunter
+          if ($mod) {
+            $findings += Invoke-ScriptAnalyzer -Path ./src -Recurse -CustomRulePath $mod[0].Path -ErrorAction SilentlyContinue
+          }
+          if ($findings) {
+            $findings | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 200 | Write-Host
+            throw "$($findings.Count) security finding(s)."
+          }
+          Write-Host 'No security findings.'
+
+  contract:
+    name: Read-only + credential contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+      - name: Assert the safety contract
+        shell: pwsh
+        run: |
+          # These are the promises the README makes to anyone about to run this
+          # against production with admin rights. They are enforced, not assumed.
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests/Contract.Tests.ps1'
+          $cfg.Run.PassThru = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          $r = Invoke-Pester -Configuration $cfg
+          if ($r.FailedCount -gt 0) { throw "$($r.FailedCount) contract test(s) failed." }
+
+  scorecard:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-latest
+    # Scorecard needs to write its results to the code-scanning dashboard.
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scorecard.sarif

@@ -1,0 +1,43 @@
+name: Feature request
+description: A new collector, finding, or capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve
+      description: >
+        The situation, not the solution. "I cannot tell which machines had
+        Credential Guard turned off last month" is more useful than "add a
+        Credential Guard history table".
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints this project holds to
+      description: Please confirm the idea fits these. See CONTRIBUTING.md.
+      options:
+        - label: It reads only — nothing is written to or changed on a target.
+          required: true
+        - label: It uses in-box Windows cmdlets, with no module to install on the target.
+          required: true
+        - label: It works on Windows PowerShell 5.1.
+          required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Where does the data come from
+      description: >
+        Which cmdlet, registry key, or event log? If it is an event log, say
+        whether the channel is enabled by default — several are not, and a
+        collector that silently returns nothing is worse than no collector.
