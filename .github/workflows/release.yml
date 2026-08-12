@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: write   # to create the release and attach assets
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verify before publishing
         shell: pwsh
