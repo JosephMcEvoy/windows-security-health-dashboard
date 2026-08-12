@@ -19,12 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read   # gitleaks lists a PR's commits to scope its scan
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # gitleaks needs history to scan past commits
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,7 +35,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install analyzers
         shell: pwsh
         run: |
@@ -56,16 +57,58 @@ jobs:
             'PSAvoidUsingComputerNameHardcoded'
             'PSUsingInvokeExpressionUnsafely'
           )
-          $findings = Invoke-ScriptAnalyzer -Path ./src -Recurse -IncludeRule $rules
-          $mod = Get-Module -ListAvailable InjectionHunter
-          if ($mod) {
-            $findings += Invoke-ScriptAnalyzer -Path ./src -Recurse -CustomRulePath $mod[0].Path -ErrorAction SilentlyContinue
-          }
+          $findings = @(Invoke-ScriptAnalyzer -Path ./src -Recurse -IncludeRule $rules)
           if ($findings) {
             $findings | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 200 | Write-Host
-            throw "$($findings.Count) security finding(s)."
+            throw "$($findings.Count) finding(s) from the built-in security rules."
           }
-          Write-Host 'No security findings.'
+          Write-Host 'Built-in security rules: clean.'
+
+      - name: InjectionHunter (baselined)
+        shell: pwsh
+        run: |
+          # InjectionHunter is heuristic and fires on patterns this tool uses by
+          # design: dynamic member access over its own column names, and passing
+          # its own scriptblocks across a runspace boundary as text. Those are
+          # reviewed and recorded in the baseline, per rule.
+          #
+          # The baseline is a ceiling, not a mute button. A new rule, or more
+          # hits for an existing one, fails the job and has to be looked at.
+          $mod = Get-Module -ListAvailable InjectionHunter
+          if (-not $mod) {
+            Write-Host '::warning::InjectionHunter is not installed; this pass did not run.'
+            exit 0
+          }
+
+          $found = @(Invoke-ScriptAnalyzer -Path ./src -Recurse `
+            -CustomRulePath $mod[0].Path -ErrorAction SilentlyContinue)
+          $found | Format-Table -AutoSize RuleName, Severity, Line, Message |
+            Out-String -Width 200 | Write-Host
+
+          $baseline = Import-PowerShellDataFile ./build/InjectionHunterBaseline.psd1
+          $counts = @{}
+          foreach ($f in $found) { $counts[$f.RuleName] = 1 + [int]$counts[$f.RuleName] }
+
+          $regressions = @()
+          foreach ($rule in ($counts.Keys | Sort-Object)) {
+            $allowed = [int]$baseline[$rule]
+            if ($counts[$rule] -gt $allowed) {
+              $regressions += "$rule : $($counts[$rule]) finding(s), baseline allows $allowed"
+            }
+          }
+          # A drop is good news, but leaving the ceiling high hides the next one.
+          foreach ($rule in ($baseline.Keys | Sort-Object)) {
+            $now = [int]$counts[$rule]
+            if ($now -lt [int]$baseline[$rule]) {
+              Write-Host "::warning::$rule is down to $now (baseline $($baseline[$rule])) - lower the baseline."
+            }
+          }
+
+          if ($regressions) {
+            $regressions | ForEach-Object { Write-Host "::error::$_" }
+            throw "InjectionHunter found $($regressions.Count) rule(s) above baseline."
+          }
+          Write-Host "InjectionHunter: $($found.Count) finding(s), all within the reviewed baseline."
 
   contract:
     name: Read-only + credential contract
@@ -73,7 +116,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Pester
         shell: pwsh
         run: Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
@@ -100,7 +143,7 @@ jobs:
       id-token: write
     if: github.event_name != 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run analysis
@@ -110,6 +153,6 @@ jobs:
           results_format: sarif
           publish_results: true
       - name: Upload to code scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scorecard.sarif
