@@ -7,6 +7,15 @@ updates:
   #
   # The real supply-chain surface is therefore the CI itself: the third-party
   # GitHub Actions that run with access to this repository.
+  #
+  # Every `uses:` is pinned to a full commit SHA rather than a tag, because a
+  # tag is mutable: whoever controls the action's repository can repoint v3 at
+  # new code and it runs here on the next build, with this repo's token. That
+  # is not hypothetical - it is how the tj-actions/changed-files and Trivy
+  # ecosystem compromises reached their downstream users. The trailing comment
+  # records the human-readable version; Dependabot reads it, and updates both
+  # the SHA and the comment together. Dependabot doing that reliably is what
+  # keeps a pin from silently rotting into an unpatched dependency.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
