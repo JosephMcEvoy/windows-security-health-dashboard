@@ -61,7 +61,7 @@ jobs:
           Get-Content ./SHA256SUMS.txt
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Required for workflow_dispatch, where github.ref is a branch and the
           # action would otherwise refuse with "GitHub Releases requires a tag".
