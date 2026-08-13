@@ -129,11 +129,23 @@ jobs:
         env:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
-          if (-not $env:PSGALLERY_API_KEY) {
+          $key = $env:PSGALLERY_API_KEY
+          if (-not $key) {
             throw 'PSGALLERY_API_KEY is not set. Add it as a secret on the "powershell-gallery" environment (Settings -> Environments), generated at https://www.powershellgallery.com/account/apikeys and scoped to SecurityHealthDashboard.'
           }
+          # A key stored with a trailing newline - which is what you get from
+          # copying it out of a browser and piping it straight into a secret -
+          # fails as "New-line or NUL characters are not allowed in header
+          # values", thrown from deep inside the HTTP stack and saying nothing
+          # about where the newline came from. Trim it, then check the shape.
+          # \A and \z, not ^ and $: in .NET, $ matches BEFORE a trailing
+          # newline, so ^\S+$ happily accepts the exact value that breaks.
+          $key = $key.Trim()
+          if ($key -notmatch '\A\S+\z') {
+            throw 'PSGALLERY_API_KEY still contains whitespace after trimming. Re-add the secret as a single line with no line break.'
+          }
           Publish-PSResource -Path ./src/SecurityHealthDashboard.ps1 `
-                             -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
+                             -Repository PSGallery -ApiKey $key
           Write-Host 'Push accepted.'
 
       - name: Confirm it is live

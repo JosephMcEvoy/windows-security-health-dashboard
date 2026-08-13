@@ -105,6 +105,26 @@ Report 'ProjectUri is set' ([string]::IsNullOrWhiteSpace($info.ProjectUri) -eq $
 Report 'At least three tags for Gallery search' (@($info.Tags).Count -ge 3) `
     "Got $(@($info.Tags).Count)."
 
+# ------------------------------------------------------ Gallery field limits
+# A local repository accepts anything that packs, so the round trip below is
+# blind to the server's own validation. These are the NuGet field limits the
+# Gallery enforces on push, and hitting one rejects the upload with a 400 after
+# every other check has passed. The Description limit is not hypothetical: the
+# help block sailed past 4000 characters and failed the first real publish.
+$limits = @(
+    @{ Name = 'Description'; Value = $info.Description; Max = 4000 }
+    @{ Name = 'Name'; Value = $info.Name; Max = 100 }
+    @{ Name = 'Author'; Value = $info.Author; Max = 4000 }
+    @{ Name = 'Copyright'; Value = $info.Copyright; Max = 4000 }
+    @{ Name = 'ReleaseNotes'; Value = ($info.ReleaseNotes -join "`n"); Max = 35000 }
+    @{ Name = 'Tags (combined)'; Value = (@($info.Tags) -join ' '); Max = 4000 }
+)
+foreach ($limit in $limits) {
+    $len = ([string]$limit.Value).Length
+    Report "$($limit.Name) is within the Gallery limit of $($limit.Max)" ($len -le $limit.Max) `
+        "$len characters. The Gallery rejects the push with 400 once this is exceeded."
+}
+
 # ------------------------------------------------------- version agreement
 $src = Get-Content -Path $Path -Raw
 $toolVersion = ''

@@ -79,22 +79,6 @@ Full history: https://github.com/JosephMcEvoy/windows-security-health-dashboard/
     generated from the same New-HealthCards / Get-UnifiedEvents functions, so the two
     views cannot drift apart.
 
-    Every table supports:
-      - Click a column header to sort (click again to reverse). An arrow marks the
-        sorted column.
-      - Click the small arrow on the right of any header for that column's filter:
-        distinct-value checkboxes, a "text contains" box, and sort shortcuts.
-        A filtered column is marked with * in its header. The value list cascades,
-        i.e. it only offers values still reachable under the other active filters.
-      - The "Find" box in the top bar searches every column of every table on every
-        tab at once. "Clear filters" resets search, filters and sorting everywhere.
-      - Double-click any row for the full, untruncated record in a detail window
-        (Copy all puts it on the clipboard). Hovering a cell shows its full text.
-      - Columns are freely resizable by dragging the header edge, and double-clicking
-        the edge auto-fits to content. Ctrl+C copies selected rows with headers.
-    The Events tab additionally has one-click Blocked / Audited / Allowed / Detected /
-    Alerts buttons that drive the same filter state.
-
     FLEET
     Give it several targets and they are scanned in parallel through a throttled
     runspace pool. The Fleet tab lists one row per host with a Deviation count -
@@ -109,6 +93,11 @@ Full history: https://github.com/JosephMcEvoy/windows-security-health-dashboard/
     sorted first. Event volumes are compared by count, since individual events
     are time-windowed and would drown the diff in noise.
 
+.NOTES
+    Read-only: the tool changes nothing on the target.
+    Event collection is capped per log (see $script:MaxEventsPerLog) to keep scans fast.
+    Targets 'localhost' / '.' run the collector locally without requiring WinRM loopback.
+
     REQUIREMENTS
     Operator workstation : Windows PowerShell 5.1+ (or PowerShell 7 on Windows), WPF available.
     Target computer      : WinRM enabled (Enable-PSRemoting), operator must be an admin on the
@@ -117,10 +106,22 @@ Full history: https://github.com/JosephMcEvoy/windows-security-health-dashboard/
     Some collectors (auditpol, security event log, BitLocker, exclusions) require elevation
     on the target - remoting as an administrator satisfies this.
 
-.NOTES
-    Read-only: the tool changes nothing on the target.
-    Event collection is capped per log (see $script:MaxEventsPerLog) to keep scans fast.
-    Targets 'localhost' / '.' run the collector locally without requiring WinRM loopback.
+    WORKING WITH THE TABLES
+    Every table, in both the dashboard and the exported report, supports:
+      - Click a column header to sort (click again to reverse). An arrow marks the
+        sorted column.
+      - Click the small arrow on the right of any header for that column's filter:
+        distinct-value checkboxes, a "text contains" box, and sort shortcuts.
+        A filtered column is marked with * in its header. The value list cascades,
+        i.e. it only offers values still reachable under the other active filters.
+      - The "Find" box in the top bar searches every column of every table on every
+        tab at once. "Clear filters" resets search, filters and sorting everywhere.
+      - Double-click any row for the full, untruncated record in a detail window
+        (Copy all puts it on the clipboard). Hovering a cell shows its full text.
+      - Columns are freely resizable by dragging the header edge, and double-clicking
+        the edge auto-fits to content. Ctrl+C copies selected rows with headers.
+    The Events tab additionally has one-click Blocked / Audited / Allowed / Detected /
+    Alerts buttons that drive the same filter state.
 
 .PARAMETER ComputerName
     One or more targets. In the GUI they also seed the target box; separate names
