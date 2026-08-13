@@ -1,3 +1,39 @@
+<#PSScriptInfo
+
+.VERSION 1.5.0
+
+.GUID 0c021c59-dfaa-4cdf-ac91-cd4c701dd77c
+
+.AUTHOR Joseph McEvoy
+
+.COMPANYNAME
+
+.COPYRIGHT (c) 2026 Joseph McEvoy. Released under the MIT licence.
+
+.TAGS Security Windows Defender ASR AppLocker WDAC Firewall BitLocker SmartScreen Hardening Audit Compliance DFIR BlueTeam Reporting WinRM PSEdition_Desktop PSEdition_Core
+
+.LICENSEURI https://github.com/JosephMcEvoy/windows-security-health-dashboard/blob/main/LICENSE
+
+.PROJECTURI https://github.com/JosephMcEvoy/windows-security-health-dashboard
+
+.ICONURI
+
+.EXTERNALMODULEDEPENDENCIES
+
+.REQUIREDSCRIPTS
+
+.EXTERNALSCRIPTDEPENDENCIES
+
+.RELEASENOTES
+Read-only by design - the collector changes nothing on a target, and a CI contract
+test fails the build if a state-changing cmdlet appears in the source. No runtime
+dependencies: one self-contained script over in-box Windows cmdlets.
+Full history: https://github.com/JosephMcEvoy/windows-security-health-dashboard/blob/main/CHANGELOG.md
+
+.PRIVATEDATA
+
+#>
+
 <#
 .SYNOPSIS
     Security Health Dashboard - remote Microsoft security tooling triage GUI.
@@ -273,7 +309,7 @@ if ($TargetFile) {
 }
 
 $script:MaxEventsPerLog = 1200
-$script:ToolVersion = '1.5'
+$script:ToolVersion = '1.5.0'
 # Deliberately NOT $script:Throttle / $script:TimeoutSec: at script scope those
 # are the parameter variables, and assigning to them re-runs their attributes.
 $script:ScanThrottle = [math]::Max(1, $Throttle)

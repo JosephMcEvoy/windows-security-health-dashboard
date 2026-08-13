@@ -11,6 +11,11 @@
       Encoding         - pure ASCII. Windows PowerShell 5.1 reads a BOM-less file
                          as ANSI, so one stray non-ASCII byte silently corrupts
                          whatever line it lands on.
+      Gallery manifest - the PSScriptInfo block and the comment-based help must
+                         both still parse, and their version must agree with
+                         $script:ToolVersion. build/Test-GalleryPublish.ps1
+                         rehearses the whole publish; this is the cheap half,
+                         so it runs under 5.1 too.
       XAML             - the embedded window must be well-formed XML and every
                          FindName lookup must resolve to a real x:Name.
       Param collisions - a $script:<Name> assignment where <Name> is also a
@@ -63,6 +68,30 @@ $src = Get-Content -Path $Path -Raw
 $bytes = [System.IO.File]::ReadAllBytes($Path)
 $nonAscii = @($bytes | Where-Object { $_ -gt 127 })
 Report 'File is pure ASCII (safe for Windows PowerShell 5.1)' ($nonAscii.Count -eq 0) "$($nonAscii.Count) byte(s) above 0x7F"
+
+# -------------------------------------------------------- Gallery manifest
+# The PSScriptInfo block is what the PowerShell Gallery reads, and it sits
+# directly above the comment-based help. The blank line between the two is
+# load-bearing: without it the parser treats them as one comment region, keeps
+# the first (which holds no help keywords), and the script silently loses its
+# help. PowerShellGet then finds no Description and refuses to publish - at
+# release time, with nothing earlier in the build having noticed.
+$psiVersion = ''
+$psiFound = $src -match '(?s)^<#PSScriptInfo\s.*?\.VERSION\s+(\S+).*?\.GUID\s+[0-9a-fA-F-]{36}.*?#>'
+if ($psiFound) { $psiVersion = $Matches[1] }
+Report 'PSScriptInfo block present, with a version and a GUID' $psiFound `
+    'Required to publish to the PowerShell Gallery.'
+Report 'Comment-based help is still attached to the script' ($null -ne $ast.GetHelpContent()) `
+    'The Gallery reads .DESCRIPTION from here. Restore the blank line between the PSScriptInfo block and the help block.'
+
+$toolVersion = ''
+if ($src -match "\`$script:ToolVersion\s*=\s*'([^']+)'") { $toolVersion = $Matches[1] }
+Report 'PSScriptInfo version matches $script:ToolVersion' `
+    ($psiVersion -ne '' -and $psiVersion -eq $toolVersion) `
+    "PSScriptInfo says '$psiVersion'; the script reports '$toolVersion' in every exported report."
+Report 'PSScriptInfo version is a three-part semantic version' `
+    ($psiVersion -match '^\d+\.\d+\.\d+$') `
+    "Got '$psiVersion'. The Gallery normalises versions, so 1.5 and 1.5.0 are one release and the second push is refused."
 
 # -------------------------------------------------------------------- XAML
 $xamlOk = $true; $xamlDetail = ''; $names = @()

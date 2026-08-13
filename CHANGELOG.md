@@ -36,6 +36,10 @@ First public release.
   global find with per-tab match counts, row detail, per-table CSV export, and a
   print mode that expands every tab. Self-contained, no external references.
 - `-TimeoutSec` ceiling so an unattended run can never wedge on a hung host.
+- **Published to the PowerShell Gallery** as `SecurityHealthDashboard`, pushed by
+  the release workflow from the tag. The published file is byte-identical to the
+  release asset, so one `SHA256SUMS.txt` verifies either copy, and CI rehearses
+  the whole publish against a throwaway repository on every pull request.
 
 ### Fixed
 These all shipped during development and are now covered by regression tests:
