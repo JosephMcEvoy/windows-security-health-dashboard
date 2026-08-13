@@ -4,6 +4,7 @@
 [![Security](https://github.com/JosephMcEvoy/windows-security-health-dashboard/actions/workflows/security.yml/badge.svg)](https://github.com/JosephMcEvoy/windows-security-health-dashboard/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell 5.1+](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE.svg)](https://learn.microsoft.com/powershell/)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/SecurityHealthDashboard?label=PowerShell%20Gallery&color=5391FE)](https://www.powershellgallery.com/packages/SecurityHealthDashboard)
 
 Point it at a Windows machine and get one answer to the question *"what is
 actually going on with security on this box?"* — what is blocking, what is
@@ -69,6 +70,18 @@ Warning, Info — so you are not left reading raw tables to find the problem.
 </table>
 
 ## Quick start
+
+```powershell
+# From the PowerShell Gallery - lands in your user Scripts folder, which is on PATH
+Install-Script SecurityHealthDashboard -Scope CurrentUser
+SecurityHealthDashboard.ps1
+```
+
+Would rather install nothing? Take the single `.ps1` from
+[Releases](https://github.com/JosephMcEvoy/windows-security-health-dashboard/releases)
+and run it in place — every example below works either way. The file published
+to the Gallery is byte-identical to the release asset, so the release's
+`SHA256SUMS.txt` verifies both, and CI asserts that on every pull request.
 
 ```powershell
 # Scan one machine, interactively
@@ -174,7 +187,7 @@ you are worried about.
 
 ```
 src/SecurityHealthDashboard.ps1   the tool - one self-contained script
-build/                            static checks, sample report, screenshots
+build/                            static checks, gallery rehearsal, sample report
 tests/                            Pester unit + contract tests
 tests/browser/                    Playwright tests for the HTML report
 docs/screenshots/                 images used above
@@ -186,7 +199,8 @@ examples/                         a sample -TargetFile list
 
 ```powershell
 ./build/Invoke-StaticChecks.ps1                  # structural guards
-Invoke-Pester ./tests                            # 60 unit + contract tests
+Invoke-Pester ./tests                            # unit + contract tests
+./build/Test-GalleryPublish.ps1                  # rehearse the Gallery publish
 ./build/New-SampleReport.ps1 -Fleet -OutputPath ./sample.html
 ```
 

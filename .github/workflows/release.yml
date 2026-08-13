@@ -31,20 +31,26 @@ jobs:
           $r = Invoke-Pester -Configuration $cfg
           if ($r.FailedCount -gt 0) { throw "Refusing to release: $($r.FailedCount) test(s) failed." }
 
-      - name: Check the tag matches the tool version
+      - name: Check the tag, the script and the Gallery manifest agree
         shell: pwsh
         run: |
-          # A release tagged v1.6.0 that ships a script reporting 1.5 would put
-          # the wrong version in every exported report's provenance panel.
+          # Three places carry the version and nothing else notices when they
+          # drift: the tag, $script:ToolVersion - which is stamped into every
+          # exported report's provenance panel - and the PSScriptInfo block the
+          # PowerShell Gallery reads. A release tagged v1.6.0 that ships a
+          # script reporting 1.5 puts the wrong version in front of whoever
+          # reads the report, and a PSScriptInfo that disagrees pushes the wrong
+          # number to the Gallery, where it cannot be taken back.
           $tag = if ($env:GITHUB_REF -like 'refs/tags/*') { $env:GITHUB_REF -replace '^refs/tags/v', '' }
                  else { '${{ github.event.inputs.tag }}' -replace '^v', '' }
           $src = Get-Content ./src/SecurityHealthDashboard.ps1 -Raw
           if ($src -notmatch "\`$script:ToolVersion\s*=\s*'([^']+)'") { throw 'Could not read $script:ToolVersion.' }
           $ver = $Matches[1]
-          Write-Host "tag=$tag  ToolVersion=$ver"
-          if (-not $tag.StartsWith($ver)) {
-            throw "Tag '$tag' does not match `$script:ToolVersion '$ver'. Bump the script or fix the tag."
-          }
+          if ($src -notmatch '(?s)^<#PSScriptInfo\s.*?\.VERSION\s+(\S+)') { throw 'Could not read .VERSION from the PSScriptInfo block.' }
+          $psi = $Matches[1]
+          Write-Host "tag=$tag  ToolVersion=$ver  PSScriptInfo=$psi"
+          if ($ver -ne $tag) { throw "Tag '$tag' does not match `$script:ToolVersion '$ver'. Bump the script or fix the tag." }
+          if ($psi -ne $tag) { throw "Tag '$tag' does not match the PSScriptInfo .VERSION '$psi'. Bump the manifest or fix the tag." }
 
       - name: Generate a sample report to ship with the release
         shell: pwsh
@@ -72,3 +78,78 @@ jobs:
             src/SecurityHealthDashboard.ps1
             SecurityHealth_SampleReport.html
             SHA256SUMS.txt
+
+  gallery:
+    name: Publish to the PowerShell Gallery
+    # Only after the release job has run the full test suite and cut the
+    # GitHub release. If this job fails the release still stands, which is the
+    # right way round: the Gallery copy can be retried, the version number
+    # cannot be reclaimed.
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # An environment, so the API key is scoped to this one job instead of being
+    # readable by every workflow in the repository, and so the push can be put
+    # behind a required reviewer later without editing this file.
+    environment:
+      name: powershell-gallery
+      url: https://www.powershellgallery.com/packages/SecurityHealthDashboard
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PSResourceGet
+        shell: pwsh
+        run: Install-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Rehearse the publish locally first
+        shell: pwsh
+        # The same rehearsal CI runs on every pull request. Repeating it here is
+        # the last point at which a bad manifest is still free.
+        run: ./build/Test-GalleryPublish.ps1
+
+      - name: Refuse to reuse a published version
+        shell: pwsh
+        run: |
+          $info = Test-ScriptFileInfo -Path ./src/SecurityHealthDashboard.ps1
+          # [x.y.z] is a NuGet exact-version range. A bare "1.5.0" means "at
+          # least 1.5.0" and would match some later release, so this check
+          # would pass while the push went on to fail.
+          $existing = Find-PSResource -Name $info.Name -Version "[$($info.Version)]" `
+                                      -Repository PSGallery -ErrorAction SilentlyContinue
+          if ($existing) {
+            throw "$($info.Name) $($info.Version) is already on the Gallery. A published version cannot be replaced or reused - bump the version and tag again."
+          }
+          Write-Host "$($info.Name) $($info.Version) is not on the Gallery yet."
+
+      - name: Publish
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) {
+            throw 'PSGALLERY_API_KEY is not set. Add it as a secret on the "powershell-gallery" environment (Settings -> Environments), generated at https://www.powershellgallery.com/account/apikeys and scoped to SecurityHealthDashboard.'
+          }
+          Publish-PSResource -Path ./src/SecurityHealthDashboard.ps1 `
+                             -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
+          Write-Host 'Push accepted.'
+
+      - name: Confirm it is live
+        shell: pwsh
+        run: |
+          # The Gallery validates and indexes asynchronously, so a push that
+          # succeeded is not yet a package anyone can install. Poll until it is
+          # really there rather than reporting success on the push alone.
+          $info = Test-ScriptFileInfo -Path ./src/SecurityHealthDashboard.ps1
+          $deadline = (Get-Date).AddMinutes(5)
+          do {
+            Start-Sleep -Seconds 15
+            $found = Find-PSResource -Name $info.Name -Version "[$($info.Version)]" `
+                                     -Repository PSGallery -ErrorAction SilentlyContinue
+          } while (-not $found -and (Get-Date) -lt $deadline)
+          if (-not $found) {
+            throw "The push was accepted but $($info.Name) $($info.Version) has not appeared after 5 minutes. Check https://www.powershellgallery.com/packages/$($info.Name) before re-running: the version may still land, and it can never be pushed twice."
+          }
+          Write-Host "Live: $($found.Name) $($found.Version)"

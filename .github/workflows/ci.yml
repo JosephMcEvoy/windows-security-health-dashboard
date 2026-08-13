@@ -49,6 +49,24 @@ jobs:
           Write-Host "$($results.Count) finding(s), $($blocking.Count) blocking."
           if ($blocking.Count) { throw "PSScriptAnalyzer reported $($blocking.Count) error/warning finding(s)." }
 
+  gallery:
+    name: Gallery publish rehearsal
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install PSResourceGet
+        shell: pwsh
+        run: Install-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -Force -Scope CurrentUser -SkipPublisherCheck
+      - name: Rehearse the publish against a throwaway repository
+        shell: pwsh
+        # The Gallery is append-only: a version can be unlisted, but never
+        # replaced and never reused. So the whole publish path runs here, on
+        # the pull request, where a broken manifest costs nothing. Catching it
+        # at the tag instead means burning a version number.
+        run: ./build/Test-GalleryPublish.ps1
+
   test:
     name: Pester (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

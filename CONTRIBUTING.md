@@ -92,6 +92,33 @@ and each one exists because it broke something real:
 | Pure ASCII | See above. |
 | No comment-based-help keyword that PowerShell does not recognise | An invalid one truncates the whole help block. `Get-Help` silently lost every parameter for a while because of `.REQUIREMENTS`. |
 | Every `Get-WinEvent -FilterHashtable` id list ≤ 22 ids | Overflowing it fails the whole query, silently returning nothing. |
+| Keep the blank line between the `PSScriptInfo` block and the help block below it | Without it the parser reads the two comments as one region, keeps the first — which holds no help keywords — and the script silently loses its help. The Gallery then refuses to publish for a missing `Description`. Same failure as `.REQUIREMENTS` above, different cause. |
+| The tag, `$script:ToolVersion` and `PSScriptInfo .VERSION` must be identical | They are stamped into different places and nothing else notices when they drift. See below. |
+
+## Releasing
+
+Pushing a `vX.Y.Z` tag runs the release workflow: it re-runs the full suite,
+cuts the GitHub release with checksums, then publishes to the PowerShell
+Gallery. The published file is byte-identical to the release asset, so one
+`SHA256SUMS.txt` verifies either copy.
+
+The version lives in three places and they must agree — checked on the pull
+request and again at the tag:
+
+1. `$script:ToolVersion` in `src/SecurityHealthDashboard.ps1`, stamped into
+   every exported report's provenance panel.
+2. `.VERSION` in the `PSScriptInfo` block at the top of the same file, which is
+   what the Gallery publishes.
+3. The tag itself.
+
+The Gallery is append-only: a published version can be unlisted but never
+replaced, and its number can never be reused. So `build/Test-GalleryPublish.ps1`
+rehearses the whole publish — pack, push, fetch back, compare bytes — against a
+throwaway local repository, and CI runs it on every pull request. Run it
+yourself before bumping a version.
+
+**Never change the `.GUID`.** It is the package's identity on the Gallery, and a
+push whose GUID differs from the first published version's is rejected outright.
 
 ## Style
 
